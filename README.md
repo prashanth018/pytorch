@@ -13,6 +13,9 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
 
 - Env: `ml-env`
 
+## To-do
+- [ ] test `fit_linear_regression`
+
 ## Learning
 - .backward() only works on scalars. if the output is a vector you either reduce it first (e.sum().backward()) or tell it what gradient is coming in (e.backward(torch.ones_like(e))).
 - the graph is built during the forward pass and freed during backward. so if you call backward twice on the same forward it errors out. you have to run the forward again to get a fresh graph.
