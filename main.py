@@ -1,4 +1,5 @@
 import torch
+from torch.nn import Linear, Parameter, Sequential, ReLU
 
 
 def make_tensor():
@@ -55,6 +56,15 @@ def gen_inp_for_linear_reg():
     w = torch.tensor([2.0, -4.0, 3.0])
     y = torch.round(X @ w)
     return (X, y)
+
+
+def gen_inp_2_layer_mlp():
+    x = torch.tensor([[1.0, 2.0]])
+    w1 = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+    b1 = torch.tensor([0.0, 0.0])
+    w2 = torch.tensor([[1.0, 1.0]])
+    b2 = torch.tensor([0.0])
+    return (x, w1, b1, w2, b2)
 
 
 # Final w = tensor([ 1.9724, -4.0179,  3.0264]), b = tensor([-0.1865])
@@ -114,8 +124,61 @@ def single_neuron_forward(x):
     Returns:
         Python float, the neuron output.
     """
-    # TODO: build nn.Linear(3, 1), set fixed weight/bias under no_grad, return float output
-    pass
+    neuron = Linear(3, 1)
+    with torch.no_grad():
+        neuron.weight = Parameter(torch.tensor([[0.5, -0.2, 0.3]]))
+        neuron.bias = Parameter(torch.tensor([0.1]))
+    return neuron(x).item()
+
+
+def two_layer_mlp_forward(x, w1, b1, w2, b2):
+    """Build a 2-layer MLP, set fixed weights, return scalar output.
+
+    Args:
+        x (torch.Tensor): Input of shape (1, 2).
+        w1 (torch.Tensor): First Linear weight, shape (2, 2).
+        b1 (torch.Tensor): First Linear bias, shape (2,).
+        w2 (torch.Tensor): Second Linear weight, shape (1, 2).
+        b2 (torch.Tensor): Second Linear bias, shape (1,).
+
+    Returns:
+        float: Scalar network output.
+    """
+    n1 = Linear(2, 2)
+    with torch.no_grad():
+        n1.weight = Parameter(w1)
+        n1.bias = Parameter(b1)
+    n2 = Linear(2, 1)
+    with torch.no_grad():
+        n2.weight = Parameter(w2)
+        n2.bias = Parameter(b2)
+    net = Sequential(n1, ReLU(), n2)
+    return net(x).item()
+
+
+def relu(t):
+    """Element-wise ReLU: max(0, t).
+
+    Args:
+        t (torch.Tensor): input tensor
+
+    Returns:
+        torch.Tensor: activated tensor
+    """
+    return torch.where(t > 0.0, t, 0.0)
+
+
+def leaky_relu(t, slope=0.01):
+    """Element-wise Leaky ReLU with given negative slope.
+
+    Args:
+        t (torch.Tensor): input tensor
+        slope (float): slope for negative values
+
+    Returns:
+        torch.Tensor: activated tensor
+    """
+    return torch.where(t > 0.0, t, slope * t)
 
 
 if __name__ == "__main__":
@@ -127,4 +190,9 @@ if __name__ == "__main__":
     # X, y = gen_inp_for_linear_reg()
     # print("X = ", X, "y = ", y)
     # print(fit_linear_regression(X, y, lr=0.01, steps=500))
-    pass
+    # print(single_neuron_forward(torch.tensor([[1.0, 2.0, 3.0]])))
+    # two_layer_mlp_forward()
+    # print(two_layer_mlp_forward(*gen_inp_2_layer_mlp()))
+    print(relu(torch.tensor([-2.0, -0.5, 0.0, 1.5])))
+    print(leaky_relu(torch.tensor([-2.0, -0.5, 0.0, 1.5]), 0.1))
+    # pass
