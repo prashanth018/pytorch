@@ -50,6 +50,15 @@ def grad_wss(w_list, x_list):
     # return [round(w_i.item(), 4) for w_i in list(w.grad)]
 
 
+def gen_inp_for_linear_reg():
+    X = ((torch.rand(18).reshape(6, 3) * 2) - 1) * 6
+    w = torch.tensor([2.0, -4.0, 3.0])
+    y = torch.round(X @ w)
+    return (X, y)
+
+
+# Final w = tensor([ 1.9724, -4.0179,  3.0264]), b = tensor([-0.1865])
+# Expected w = tensor([2.0, -4.0, 3.0]), b = tensor([0.0])
 def fit_linear_regression(X, y, lr=0.1, steps=500):
     """Fit y ~= X @ w + b with full-batch GD using only autograd.
 
@@ -69,23 +78,44 @@ def fit_linear_regression(X, y, lr=0.1, steps=500):
     batch, dim = X.shape
     w = torch.rand(dim, dtype=torch.float32, requires_grad=True)
     b = torch.rand(1, dtype=torch.float32, requires_grad=True)
+    print("init w = ", w, "init b = ", b)
     for st in range(steps):
+        # print(
+        #     "\n\n#####\nep = ",
+        #     st,
+        # )
         y_pred = X @ w + b
+        # print("y_pred", y_pred)
+        # print("y_    ", y)
         loss = (y - y_pred) ** 2
+        print("E = ", st, "loss = ", loss.mean().item())
         loss.mean().backward()
         with torch.no_grad():
+            # print("w = ", w, "b = ", b)
+            # print("w.grad = ", w.grad, "b.grad = ", b.grad)
             w -= lr * w.grad
             b -= lr * b.grad
         w.grad = None
         b.grad = None
 
-    y_pred = X @ w + b
-    loss = (y - y_pred) ** 2
-    loss.mean().backward()
-    print(loss)
+    # y_pred = X @ w + b
+    # loss = (y - y_pred) ** 2
+    # loss.mean().backward()
+    # print("loss ", loss)
+    return w.detach(), b.detach()
 
-    # TODO: return detached w, b
-    return 1.0
+
+def single_neuron_forward(x):
+    """Forward pass of one fixed linear neuron.
+
+    Args:
+        x: torch.Tensor of shape (1, 3).
+
+    Returns:
+        Python float, the neuron output.
+    """
+    # TODO: build nn.Linear(3, 1), set fixed weight/bias under no_grad, return float output
+    pass
 
 
 if __name__ == "__main__":
@@ -94,4 +124,7 @@ if __name__ == "__main__":
     # print(grad_of_square(3.0))
     # print(grad_wss([1, 2, 3], [4, 5, 6]))
     # print(grad_wss([1.0, 2.0], [3.0, 4.0]))
+    # X, y = gen_inp_for_linear_reg()
+    # print("X = ", X, "y = ", y)
+    # print(fit_linear_regression(X, y, lr=0.01, steps=500))
     pass
