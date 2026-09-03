@@ -1,5 +1,5 @@
 import torch
-from torch.nn import Linear, Parameter, Sequential, ReLU
+from torch.nn import Linear, Parameter, Sequential, ReLU, Dropout
 
 
 def make_tensor():
@@ -181,6 +181,78 @@ def leaky_relu(t, slope=0.01):
     return torch.where(t > 0.0, t, slope * t)
 
 
+def softmax(t, dim):
+    """Numerically stable softmax along dim.
+
+    Args:
+        t (torch.Tensor): input tensor
+        dim (int): dimension along which to apply softmax
+
+    Returns:
+        torch.Tensor: tensor of same shape as t; slices along dim sum to 1
+    """
+    exp = torch.exp(t - t.max(dim=dim, keepdim=True).values)
+    return exp / exp.sum(dim=dim, keepdim=True)
+
+
+def mse(pred, target):
+    """
+    Compute mean squared error between pred and target.
+
+    Args:
+        pred (torch.Tensor): Predicted values.
+        target (torch.Tensor): Ground-truth values (same shape as pred).
+
+    Returns:
+        float: Mean of squared differences.
+    """
+    assert pred.shape == target.shape
+    return torch.mean((pred - target) ** 2).item()
+
+
+def bce_with_logits(logits, targets):
+    """Mean BCE-with-logits loss, numerically stable, rounded to 4 decimals.
+
+    Args:
+        logits (torch.Tensor): 1-D raw logits.
+        targets (torch.Tensor): 1-D binary targets in {0, 1}, same shape.
+
+    Returns:
+        float: mean loss rounded to 4 decimal places.
+    """
+    # Formula = max(x,0) - x*y + log(1 + e^-|x|)
+    return (
+        (
+            torch.clamp(logits, min=0.0)
+            - logits * targets
+            + torch.log(1.0 + torch.exp(-torch.absolute(logits)))
+        )
+        .mean()
+        .item()
+    )
+
+
+def dropout_demo():
+    """Demonstrate Dropout behavior in eval vs train mode.
+
+    Returns:
+        tuple: (eval_output, train_nonzero_count)
+            eval_output: result of Dropout(ones) in eval mode (identity)
+            train_nonzero_count: int count of nonzero elements after Dropout in train mode
+    """
+
+    torch.manual_seed(0)
+    x = torch.ones(10)
+    drop = Dropout(p=0.5)
+    drop.eval()
+    eval_out = drop(x)
+    drop.train()
+    train_out = drop(x)
+    # print(train_out)
+    count = torch.count_nonzero(train_out).item()
+    return (eval_out, count)
+
+
 if __name__ == "__main__":
     # print(make_tensor())
     # print(reshape_transpose(torch.arange(1, 7, dtype=torch.int32)))
@@ -193,6 +265,10 @@ if __name__ == "__main__":
     # print(single_neuron_forward(torch.tensor([[1.0, 2.0, 3.0]])))
     # two_layer_mlp_forward()
     # print(two_layer_mlp_forward(*gen_inp_2_layer_mlp()))
-    print(relu(torch.tensor([-2.0, -0.5, 0.0, 1.5])))
-    print(leaky_relu(torch.tensor([-2.0, -0.5, 0.0, 1.5]), 0.1))
+    # print(relu(torch.tensor([-2.0, -0.5, 0.0, 1.5])))
+    # print(leaky_relu(torch.tensor([-2.0, -0.5, 0.0, 1.5]), 0.1))
+    # print(softmax(torch.tensor([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]), dim=1))
+    # print(mse(torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])))
+    # print(bce_with_logits(torch.tensor([0.0, 2.0]), torch.tensor([0.0, 1.0])))
+    print(dropout_demo())
     # pass
