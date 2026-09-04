@@ -1,5 +1,15 @@
 import torch
-from torch.nn import Linear, Parameter, Sequential, ReLU, Dropout
+from torch.nn import (
+    Linear,
+    Parameter,
+    Sequential,
+    ReLU,
+    Dropout,
+    BatchNorm1d,
+    Module,
+    BCEWithLogitsLoss,
+)
+from torch.optim import Adam
 
 
 def make_tensor():
@@ -253,6 +263,83 @@ def dropout_demo():
     return (eval_out, count)
 
 
+def bn_eval(x, mean, var, gamma, beta, eps=1e-5):
+    """Apply batch-norm inference normalization.
+
+    Args:
+        x (Tensor): input tensor
+        mean (Tensor): running mean
+        var (Tensor): running variance
+        gamma (Tensor): scale parameter
+        beta (Tensor): shift parameter
+        eps (float): numerical stability constant
+
+    Returns:
+        Tensor: normalized and affine-transformed tensor
+    """
+    return torch.round(gamma * ((x - mean) / ((var + eps) ** 0.5)) + beta, decimals=4)
+
+
+class RegularizedMLP(Module):
+    """MLP with BatchNorm1d and Dropout for binary classification."""
+
+    def __init__(self, input_dim: int, hidden_dim: int = 64, dropout_p: float = 0.3):
+        super().__init__()
+        self.net = Sequential(
+            Linear(in_features=input_dim, out_features=hidden_dim),
+            BatchNorm1d(num_features=hidden_dim),
+            ReLU(),
+            Dropout(p=dropout_p),
+            Linear(in_features=hidden_dim, out_features=1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return shape (N,) logits for batch x of shape (N, input_dim)."""
+        out = self.net(x)
+        # print(out.shape)
+        return out.squeeze(1)
+
+
+def train_model(model, X_train, y_train, epochs=150, lr=1e-2):
+    """Train model in-place with BCEWithLogitsLoss + Adam. Return model."""
+    model.train()
+    optim = Adam(model.parameters(), lr=lr)
+    bce_loss_fn = BCEWithLogitsLoss()
+    # print("y_pred at the start", torch.sigmoid(model(X_train)))
+    for e in range(epochs):
+        model.zero_grad()
+        y_pred = model(X_train)
+        # print("X_train", X_train)
+        # print("y_train", y_train)
+        # print("y_pred", y_pred)
+        loss = bce_loss_fn(input=y_pred, target=y_train)
+        loss.backward()
+        optim.step()
+        # print("epoch = ", e, "loss = ", loss.item())
+    # y_pred = model(X_train)
+    return model
+
+
+def generate_bce_train_date(batch_size=32, input_dim=10):
+    return (
+        torch.rand((batch_size, input_dim)),
+        torch.randint(low=0, high=2, size=(batch_size,)) * 1.0,
+    )
+
+
+def run_regularized_mlp():
+    input_dim = 12
+    batch_size = 80
+    model = RegularizedMLP(input_dim=input_dim)
+    x, y = generate_bce_train_date(batch_size=batch_size, input_dim=input_dim)
+    model = train_model(model, x, y, epochs=100)
+    y_pred = model(x)
+    print(y_pred)
+    print("y_pred logits", y_pred)
+    print("y_pred at the end", torch.sigmoid(y_pred))
+    print("y_train", y)
+
+
 if __name__ == "__main__":
     # print(make_tensor())
     # print(reshape_transpose(torch.arange(1, 7, dtype=torch.int32)))
@@ -270,5 +357,15 @@ if __name__ == "__main__":
     # print(softmax(torch.tensor([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]), dim=1))
     # print(mse(torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])))
     # print(bce_with_logits(torch.tensor([0.0, 2.0]), torch.tensor([0.0, 1.0])))
-    print(dropout_demo())
-    # pass
+    # print(dropout_demo())
+    # print(
+    #     bn_eval(
+    #         torch.tensor([1.0, 2.0, 3.0]),
+    #         torch.tensor(2.0),
+    #         torch.tensor(1.0),
+    #         torch.tensor(1.0),
+    #         torch.tensor(0.0),
+    #     )
+    # )
+    # run_regularized_mlp()
+    pass
