@@ -8,6 +8,11 @@ from torch.nn import (
     BatchNorm1d,
     Module,
     BCEWithLogitsLoss,
+    Conv2d,
+    MaxPool2d,
+    Flatten,
+    CrossEntropyLoss,
+    functional,
 )
 from torch.optim import Adam
 
@@ -300,7 +305,7 @@ class RegularizedMLP(Module):
         return out.squeeze(1)
 
 
-def train_model(model, X_train, y_train, epochs=150, lr=1e-2):
+def train_mlp_model(model, X_train, y_train, epochs=150, lr=1e-2):
     """Train model in-place with BCEWithLogitsLoss + Adam. Return model."""
     model.train()
     optim = Adam(model.parameters(), lr=lr)
@@ -320,7 +325,7 @@ def train_model(model, X_train, y_train, epochs=150, lr=1e-2):
     return model
 
 
-def generate_bce_train_date(batch_size=32, input_dim=10):
+def generate_bce_train_data(batch_size=32, input_dim=10):
     return (
         torch.rand((batch_size, input_dim)),
         torch.randint(low=0, high=2, size=(batch_size,)) * 1.0,
@@ -331,13 +336,142 @@ def run_regularized_mlp():
     input_dim = 12
     batch_size = 80
     model = RegularizedMLP(input_dim=input_dim)
-    x, y = generate_bce_train_date(batch_size=batch_size, input_dim=input_dim)
-    model = train_model(model, x, y, epochs=100)
+    x, y = generate_bce_train_data(batch_size=batch_size, input_dim=input_dim)
+    model = train_mlp_model(model, x, y, epochs=100)
     y_pred = model(x)
     print(y_pred)
     print("y_pred logits", y_pred)
     print("y_pred at the end", torch.sigmoid(y_pred))
     print("y_train", y)
+
+
+def conv_out_shape(h, w, kernel, stride, padding):
+    """Return (H_out, W_out) for a 2D conv with the given spatial params.
+
+    Args:
+        h: input height
+        w: input width
+        kernel: kernel size (same for H and W)
+        stride: stride (same for H and W)
+        padding: padding (same for H and W)
+
+    Returns:
+        Tuple of ints (H_out, W_out).
+    """
+
+    def foo(val):
+        return (val + 2 * padding - kernel) // stride + 1
+
+    return (foo(h), foo(w))
+
+
+def apply_conv2d():
+    """Build nn.Conv2d(1, 1, kernel_size=2, bias=False), set a fixed kernel, convolve a fixed input.
+
+    Under torch.no_grad(), set weight to tensor([[[[1.0, 0.0], [0.0, 1.0]]]]).
+    Input is tensor([[[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]]]).
+
+    Returns:
+        torch.Tensor: Output of shape (1, 1, 2, 2).
+    """
+    conv = Conv2d(in_channels=1, out_channels=1, kernel_size=2, bias=False)
+    with torch.no_grad():
+        conv.weight = Parameter(torch.eye(2).unsqueeze(0).unsqueeze(0))
+    input = torch.arange(
+        start=1, end=10, dtype=torch.float32, requires_grad=False
+    ).reshape(
+        (1, 1, 3, 3),
+    )
+    print(input)
+    return conv(input).detach()
+
+
+def generate_conv_train_data(batch_size=100, channels=1, image_size=(8, 8)):
+    labels = torch.randint(low=0, high=2, size=(batch_size,))
+    return (
+        torch.rand((batch_size, channels, *image_size)),
+        functional.one_hot(labels).float(),
+    )
+
+
+class TinyCNN(Module):
+    """Small CNN: Conv2d -> ReLU -> pool -> (optional extras) -> Linear."""
+
+    def __init__(self, img_size=8, n_classes=2):
+        super().__init__()
+        self.net = Sequential(
+            # in_conv1     = (n, 1, 8, 8)
+            Conv2d(in_channels=1, out_channels=6, kernel_size=3, padding=1),
+            # out_conv1    = (n, 6, 8, 8)   [kernel=3, padding=1, stride=1] -> (8+2-3)/1+1 = 8
+            ReLU(),
+            # out_relu1    = (n, 6, 8, 8)   [elementwise, shape unchanged]
+            MaxPool2d(3, stride=1),
+            # out_pool1    = (n, 6, 6, 6)   [kernel=3, padding=0, stride=1] -> (8+0-3)/1+1 = 6
+            Conv2d(in_channels=6, out_channels=3, kernel_size=3, padding=1),
+            # out_conv2    = (n, 3, 6, 6)   [kernel=3, padding=1, stride=1] -> (6+2-3)/1+1 = 6
+            ReLU(),
+            # out_relu2    = (n, 3, 6, 6)   [elementwise, shape unchanged]
+            MaxPool2d(3, stride=1),
+            # out_pool2    = (n, 3, 4, 4)   [kernel=3, padding=0, stride=1] -> (6+0-3)/1+1 = 4
+            Flatten(),
+            # out_flatten  = (n, 48)        [3*4*4 = 48, batch dim kept]
+            Linear(in_features=48, out_features=n_classes),
+            # out_linear   = (n, n_classes)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+def build_model(img_size=8, n_classes=2):
+    """Return an instance of your TinyCNN (or equivalent nn.Module)."""
+    return TinyCNN(img_size=img_size, n_classes=n_classes)
+
+
+def train_conv_model(
+    model, train_x, train_y, epochs=15, lr=0.01, batch_size=32, seed=0
+):
+    """Train model on train_x/train_y and return the trained model.
+
+    Args:
+        model: nn.Module from build_model
+        train_x: FloatTensor (N, 1, H, W)
+        train_y: LongTensor (N,)
+        epochs: number of full passes over the data
+        lr: optimizer learning rate
+        batch_size: mini-batch size
+        seed: RNG seed for shuffling / init determinism
+
+    Returns:
+        Trained model (same instance is fine).
+    """
+    torch.manual_seed(seed=seed)
+    optim = Adam(params=model.parameters(), lr=lr)
+    ce_loss_fn = CrossEntropyLoss()
+    model.train()
+    # print("####Start")
+    # indices = torch.randperm(train_x.shape[0])[:4]
+    # pred_y = model(train_x[indices])
+    # print("pred_y", pred_y)
+    # print("pred_y softmax", torch.round(torch.softmax(pred_y, dim=1), decimals=4))
+    # print("\n")
+    for e in range(epochs):
+        # sample minibatch of indices
+        indices = torch.randperm(train_x.shape[0])[:batch_size]
+        model.zero_grad()
+        pred_y = model(train_x[indices])
+        loss = ce_loss_fn(input=pred_y, target=train_y[indices])
+        loss.backward()
+        optim.step()
+        # print("Epoch e = ", e, "Loss = ", loss.item())
+
+    # indices = torch.randperm(train_x.shape[0])[:4]
+    # pred_y = model(train_x[indices])
+    # print("####End")
+    # print("train_y", train_y[indices])
+    # print("pred_y logits", pred_y)
+    # print("pred_y softmax", torch.round(torch.softmax(pred_y, dim=1), decimals=4))
+    return model
 
 
 if __name__ == "__main__":
@@ -368,4 +502,13 @@ if __name__ == "__main__":
     #     )
     # )
     # run_regularized_mlp()
+    # print(conv_out_shape(28, 28, 5, 2, 0))
+    # print(apply_conv2d())
+    x_train, y_train = generate_conv_train_data(
+        batch_size=96, channels=1, image_size=(8, 8)
+    )
+    # print("x_train ", x_train.shape)
+    # print("y_train ", y_train.shape)
+    model = build_model(img_size=8, n_classes=2)
+    train_conv_model(model, x_train, y_train, epochs=300, lr=0.01, batch_size=8, seed=0)
     pass
