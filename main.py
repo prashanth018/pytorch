@@ -463,15 +463,60 @@ def train_conv_model(
         loss = ce_loss_fn(input=pred_y, target=train_y[indices])
         loss.backward()
         optim.step()
-        # print("Epoch e = ", e, "Loss = ", loss.item())
+        print("Epoch e = ", e, "Loss = ", loss.item())
 
-    # indices = torch.randperm(train_x.shape[0])[:4]
-    # pred_y = model(train_x[indices])
-    # print("####End")
-    # print("train_y", train_y[indices])
-    # print("pred_y logits", pred_y)
-    # print("pred_y softmax", torch.round(torch.softmax(pred_y, dim=1), decimals=4))
     return model
+
+
+def test_conv_nets():
+    x_train, y_train = generate_conv_train_data(
+        batch_size=96, channels=1, image_size=(8, 8)
+    )
+    # print("x_train ", x_train.shape)
+    # print("y_train ", y_train.shape)
+    model = build_model(img_size=8, n_classes=2)
+    model = train_conv_model(
+        model, x_train, y_train, epochs=300, lr=0.01, batch_size=8, seed=0
+    )
+    indices = torch.randperm(x_train.shape[0])[:4]
+    pred_y = model(x_train[indices])
+    print("train_y", y_train[indices])
+    print("pred_y logits", pred_y)
+    print("pred_y softmax", torch.round(torch.softmax(pred_y, dim=1), decimals=4))
+
+
+def sgd_step(w, grad, lr):
+    """Perform one SGD update step.
+
+    Args:
+        w: Current parameter tensor.
+        grad: Gradient tensor (same shape as w).
+        lr: Learning rate (float).
+
+    Returns:
+        Updated parameter tensor w - lr * grad.
+    """
+    return w - lr * grad
+
+
+def momentum_step(w, grad, v, lr, mu):
+    """One SGD-with-momentum step.
+
+    Args:
+        w: parameter tensor
+        grad: gradient tensor (same shape as w)
+        v: velocity tensor (same shape as w)
+        lr: learning rate (float)
+        mu: momentum coefficient (float)
+
+    Returns:
+        (w_new, v_new) tuple of tensors
+    """
+    # momentum is kinda the running mean of past grads
+    v_new = mu * v + grad
+    # use this new grad to compute weight
+    w_new = w - lr * v_new
+    return (w_new, v_new)
 
 
 if __name__ == "__main__":
@@ -504,11 +549,15 @@ if __name__ == "__main__":
     # run_regularized_mlp()
     # print(conv_out_shape(28, 28, 5, 2, 0))
     # print(apply_conv2d())
-    x_train, y_train = generate_conv_train_data(
-        batch_size=96, channels=1, image_size=(8, 8)
+    # test_conv_nets()
+    # print(sgd_step(torch.tensor([1.0, 2.0]), torch.tensor([0.5, 1.0]), lr=0.1))
+    print(
+        momentum_step(
+            torch.tensor([1.0, 2.0]),
+            torch.tensor([0.1, 0.2]),
+            torch.tensor([0.0, 0.0]),
+            0.1,
+            0.9,
+        )
     )
-    # print("x_train ", x_train.shape)
-    # print("y_train ", y_train.shape)
-    model = build_model(img_size=8, n_classes=2)
-    train_conv_model(model, x_train, y_train, epochs=300, lr=0.01, batch_size=8, seed=0)
     pass
