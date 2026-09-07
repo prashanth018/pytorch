@@ -67,6 +67,44 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
 - Refer to `MyOptimizer.adam_step` for getting a sense of how to write complex math with inplace methods. 
 
 
+### Debugging Session
+
+#### Case 1: Loss staying stagnent at 0.69 (ln2) for random seeds
+
+This signifies that the model is performing like a random classifier (especially for binary labeled data).
+
+Turns out, second conv layer's output (just before relu2) has all its outputs (`x*w + b`) for all the 96 images in the dataset as negative (All of them). Largest value was `-0.055`. ReLU is shorting all these params to `0`. Therefore, the flatten layer is receiving a zero matrix.
+
+**Why is this a problem?** When we compute `loss.backward()`, given that ReLU makes the output 0.0, the incoming gradient backproped to conv2 (and thereby conv1) is 0.0. This means the `weights` and `bias` for all the layers until this ReLU stay frozen. This means all the following epochs continue to inference zero vectors from this layer.
+
+`lr = 0.001` helped a bit by not letting the params not wander too far off.
+
+**What can prevent this behavior?**
+- **BatchNorm**: before the ReLU. It re-centres activations to roughly zero mean every batch, so a whole layer can't drift negative.
+- **LeakyReLU**: Gradient is 0.01 instead of 0 on the negative side — a small leak, but enough to pass the gradient.
+
+**Debugging:**
+- Given that this exercise was about writing a new optimizer, I suspected if there was something wrong with my optimizer. I ran another experiment and swapped my optimizer with reference pytorch adam optimizer. loss values matched to 4 digits with same seed and same init data.
+- Few seeds succeeded and few seeds failed.
+- loss was `ln(2) = 0.693`, this means the model might be outputting something constant.
+- Hypothesis: "output doesn't depend on input". So to test the hypothesis, I computed the standard deviation of the activation for the whole batch of inference. It turned out to be 0.0.
+    ```python
+    h = x
+    for layer in model.net:
+        h = layer(h)
+        print(h.std(dim=0).mean().item())
+    ```
+- Confirmed the hypothesis by looking at the weights before the activation layer and turns out the `max` of the weights was `-0.055`.
+
+#### First things to check when a model won't train
+
+```python
+for n, p in model.named_parameters():
+    print(n, p.grad.norm().item() if p.grad is not None else "NO GRAD")
+```
+
+Zeros mean something is blocking the path. None means it's not connected to the loss at all. Huge values mean explosion. Then compute the loss, and check whether the output varies with the input.
+
 
 ### Rabbit hole of binary cross entropy, forward & backward KL:
 *****Rabbit hole incomplete, pending thinking around this**

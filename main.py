@@ -640,7 +640,7 @@ def test_optimizer():
         model=model,
         train_x=x_train,
         train_y=y_train,
-        optim=MyOptimizer(params=model.parameters(), lr=0.01),
+        optim=MyOptimizer(params=model.parameters(), lr=0.001),
         epochs=400,
         mini_batch_size=8,
         seed=0,
