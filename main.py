@@ -429,7 +429,9 @@ def build_model(img_size=8, n_classes=2):
     return TinyCNN(img_size=img_size, n_classes=n_classes)
 
 
-def train_conv_model(model, train_x, train_y, optim, epochs=15, batch_size=32, seed=0):
+def train_conv_model(
+    model, train_x, train_y, optim, epochs=15, mini_batch_size=8, seed=0
+):
     """Train model on train_x/train_y and return the trained model.
 
     Args:
@@ -453,16 +455,26 @@ def train_conv_model(model, train_x, train_y, optim, epochs=15, batch_size=32, s
     # print("pred_y", pred_y)
     # print("pred_y softmax", torch.round(torch.softmax(pred_y, dim=1), decimals=4))
     # print("\n")
+    # idx = 0
+    batch_size = train_x.shape[0]
     for e in range(epochs):
-        # sample minibatch of indices
-        indices = torch.randperm(train_x.shape[0])[:batch_size]
-        model.zero_grad()
-        pred_y = model(train_x[indices])
-        loss = ce_loss_fn(input=pred_y, target=train_y[indices])
-        loss.backward()
-        optim.step()
-        print("Epoch e = ", e, "Loss = ", loss.item())
-
+        total_loss = 0.0
+        batch_indices = torch.randperm(train_x.shape[0])
+        for idx in range(0, batch_size, mini_batch_size):
+            # print(" Epoch e = ", e, "Idx i = ", idx)
+            # sample minibatch of indices
+            indices = batch_indices[idx : idx + mini_batch_size]
+            # zero gradients
+            optim.zero_grad()
+            pred_y = model(train_x[indices])
+            # compute loss
+            loss = ce_loss_fn(input=pred_y, target=train_y[indices])
+            # compute gradients
+            loss.backward()
+            # optimizer step
+            optim.step()
+            total_loss += loss.item() * len(indices)
+        print("Epoch e = ", e, "Loss = ", total_loss / batch_size)
     return model
 
 
@@ -478,8 +490,8 @@ def test_conv_nets():
         x_train,
         y_train,
         optim=Adam(params=model.parameters(), lr=0.01),
-        epochs=500,
-        batch_size=8,
+        epochs=400,
+        mini_batch_size=8,
         seed=0,
     )
     indices = torch.randperm(x_train.shape[0])[:4]
@@ -551,6 +563,12 @@ def adam_step(w, grad, m, v, t, lr, beta1, beta2, eps):
     return (w_new, m_new, v_new)
 
 
+def test_model_params():
+    model = build_model(img_size=8, n_classes=2)
+    for name, p in model.named_parameters():
+        print("name = ", name, " params = ", p.shape)
+
+
 class MyOptimizer(Optimizer):
     """
     Design your own optimizer!
@@ -611,12 +629,6 @@ class MyOptimizer(Optimizer):
         return loss
 
 
-def test_model_params():
-    model = build_model(img_size=8, n_classes=2)
-    for name, p in model.named_parameters():
-        print("name = ", name, " params = ", p.shape)
-
-
 def test_optimizer():
     x_train, y_train = generate_conv_train_data(
         batch_size=96, channels=1, image_size=(8, 8)
@@ -629,8 +641,8 @@ def test_optimizer():
         train_x=x_train,
         train_y=y_train,
         optim=MyOptimizer(params=model.parameters(), lr=0.01),
-        epochs=1,
-        batch_size=8,
+        epochs=400,
+        mini_batch_size=8,
         seed=0,
     )
     indices = torch.randperm(x_train.shape[0])[:4]

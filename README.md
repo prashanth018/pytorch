@@ -41,6 +41,12 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
 - Max Pooling conversion formula, say input has height `H` then `out(H) = ((H + 2*padding - kernel) // stride) + 1`.
 - **Max Pooling `stride = kernel` by default.
 - `k[torch.arange(len(e)), e] = 1.0` and `k.scatter_(1, e[:, None], 1.0)` and `F.one_hot(e, 2).float()` are all equally efficient way to generate 1 hot prob vector from label vector `e`.
+- `model.named_parameters()` returns a list of layer name & set of weight & bias matrix for each layer. Example:
+        ```
+        name =  net.0.weight  params =  torch.Size([6, 1, 3, 3])
+        name =  net.0.bias  params =  torch.Size([6])
+        ```
+- `torch.zeros_like(p)` instead of `torch.zeros(p.shape)`. First one matches the dtype too.
 
 
 ### Losses
@@ -54,7 +60,28 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
     - Mini-batch GD = SGD = K mini-batches per epoch.
 
 
-## Optimizers
+### Optimizers
 - `w = w - lr * grad` is a simple update rule. Now the problem with this update it its too noisy. Instead we could take a running mean of the grads, like `m = beta * m + (1 - beta) * grad` where m is first moment estimate (kinda like the running mean of grads). Similarly we have `v = beta * v + (1 - beta) * grad**2` where v is the second moment estimate (like a running mean of square of grads).
+- Important note!!! timesteps corresponding to params are 1-indexed. I implemented as 0 indexed and ran into NaNs.
+- use in-place ops (`mul_`, `add_`, `addcmul_`, `addcdiv_`) instead of `a*b` / `a+b` when doing tensor math in the optimizer. every out-of-place op allocates a whole new tensor. the optimizer step is pure elementwise work so it's memory-bandwidth bound, therefore those extra allocations and the reads/writes that come with them are most of the cost. (BTW, this has nothing to do with the autograd graph, the step runs under `no_grad` which means it doesn't create a computational graph. This optimization is purely to reduce the GPU compute time.)
+- Refer to `MyOptimizer.adam_step` for getting a sense of how to write complex math with inplace methods. 
 
 
+
+### Rabbit hole of binary cross entropy, forward & backward KL:
+*****Rabbit hole incomplete, pending thinking around this**
+- What is entropy? What is "cross" in the BCE?
+- What is entropy of a function? - is it same as predictability?
+- Still can't explain `- P(x) * log(Q(x))` intuitively or derive it from blank paper. 
+- Why is it called NLL?
+
+- Binary cross entropy is a forward KL.
+
+Formal cross entropy between 2 distributions P & Q. `H(P,Q) = - [P(Class 1). log(Q(Class 1)) + P(Class 0). log(Q(Class 0))]`
+
+`Entropy of a System (P,Q) = Entropy(P) + Forward KL(P || Q)`
+Entropy = Chaos = Unpredictability
+When we train a NN, we try to reduce the entropy of the system. In this case, `Chaos (P, Q)`. `Tunable variables` in the system are the ones that can directly influence the outcome of System `Q`. W.r.t the tunable params, the GT is a constant. So entropy of the system = `Forward KL(P || Q)`. 
+
+
+The general definition of Cross Entropy is: For every possible outcome, multiply the Reality of it happening by the Model's Surprise if it happens.
