@@ -15,6 +15,7 @@ from torch.nn import (
     functional,
 )
 from torch.optim import Adam
+from torch.optim.optimizer import Optimizer
 
 
 def make_tensor():
@@ -428,9 +429,7 @@ def build_model(img_size=8, n_classes=2):
     return TinyCNN(img_size=img_size, n_classes=n_classes)
 
 
-def train_conv_model(
-    model, train_x, train_y, epochs=15, lr=0.01, batch_size=32, seed=0
-):
+def train_conv_model(model, train_x, train_y, optim, epochs=15, batch_size=32, seed=0):
     """Train model on train_x/train_y and return the trained model.
 
     Args:
@@ -446,7 +445,6 @@ def train_conv_model(
         Trained model (same instance is fine).
     """
     torch.manual_seed(seed=seed)
-    optim = Adam(params=model.parameters(), lr=lr)
     ce_loss_fn = CrossEntropyLoss()
     model.train()
     # print("####Start")
@@ -476,7 +474,13 @@ def test_conv_nets():
     # print("y_train ", y_train.shape)
     model = build_model(img_size=8, n_classes=2)
     model = train_conv_model(
-        model, x_train, y_train, epochs=300, lr=0.01, batch_size=8, seed=0
+        model,
+        x_train,
+        y_train,
+        optim=Adam(params=model.parameters(), lr=0.01),
+        epochs=500,
+        batch_size=8,
+        seed=0,
     )
     indices = torch.randperm(x_train.shape[0])[:4]
     pred_y = model(x_train[indices])
@@ -519,6 +523,123 @@ def momentum_step(w, grad, v, lr, mu):
     return (w_new, v_new)
 
 
+def adam_step(w, grad, m, v, t, lr, beta1, beta2, eps):
+    """One Adam update with bias-corrected moments.
+
+    Args:
+        w: current parameters (torch.Tensor)
+        grad: gradient of the loss w.r.t. w (torch.Tensor)
+        m: first moment estimate (torch.Tensor)
+        v: second moment estimate (torch.Tensor)
+        t: timestep, 1-indexed (int)
+        lr: learning rate (float)
+        beta1: exp. decay for first moment (float)
+        beta2: exp. decay for second moment (float)
+        eps: numerical stability constant (float)
+
+    Returns:
+        Tuple (w_new, m_new, v_new) as torch.Tensor values.
+    """
+    m_new = (beta1 * m) + (1 - beta1) * grad
+    v_new = (beta2 * v) + (1 - beta2) * grad**2
+
+    # t is 1 indexed
+    m_hat = m_new / (1 - beta1**t)
+    v_hat = v_new / (1 - beta2**t)
+
+    w_new = w - lr * m_hat / (v_hat**0.5 + eps)
+    return (w_new, m_new, v_new)
+
+
+class MyOptimizer(Optimizer):
+    """
+    Design your own optimizer!
+    - You can base it on SGD, RMSProp, Adam, or create something new.
+    - Must subclass torch.optim.Optimizer.
+    - Only dense gradients are supported.
+    """
+
+    def __init__(self, params, lr=1e-3):
+        # You can add your own hyperparameters here
+        defaults = dict(lr=lr)
+        self.eps = 1e-8
+        self.b1 = 0.9
+        self.b2 = 0.999
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def adam_step(self, param, grad, _lr):
+        # self.state[param]["m"] = (self.b1 * self.state[param]["m"]) + (1 - self.b1) * grad
+        self.state[param]["m"].mul_(self.b1).add_(grad, alpha=1 - self.b1)
+        # self.state[param]["v"] = (self.b2 * self.state[param]["v"]) + (1 - self.b2) * grad**2
+        self.state[param]["v"].mul_(self.b2).addcmul_(grad, grad, value=1 - self.b2)
+
+        # bias correction
+        bc1 = 1 - self.b1 ** self.state[param]["t"]
+        bc2 = 1 - self.b2 ** self.state[param]["t"]
+        # m_hat = self.state[param]["m"] / (bc1)
+        # v_hat = self.state[param]["v"] / (bc2)
+        # param = param - lr * m_hat / (v_hat**0.5 + self.eps)
+        param.addcdiv_(
+            self.state[param]["m"],
+            self.state[param]["v"].sqrt().div_(bc2**0.5).add_(self.eps),
+            value=-_lr / bc1,
+        )
+        self.state[param]["t"] += 1
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        for group in self.param_groups:
+            lr = group["lr"]
+            # for example group["params"] == model.parameters()
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                if p not in self.state:
+                    self.state[p]["m"] = torch.zeros_like(p)
+                    self.state[p]["v"] = torch.zeros_like(p)
+                    self.state[p]["t"] = 1
+
+                grad = p.grad
+                self.adam_step(param=p, grad=grad, _lr=lr)
+
+        return loss
+
+
+def test_model_params():
+    model = build_model(img_size=8, n_classes=2)
+    for name, p in model.named_parameters():
+        print("name = ", name, " params = ", p.shape)
+
+
+def test_optimizer():
+    x_train, y_train = generate_conv_train_data(
+        batch_size=96, channels=1, image_size=(8, 8)
+    )
+    # print(x_train.shape)
+    # print(y_train.shape)
+    model = build_model(img_size=8, n_classes=2)
+    model = train_conv_model(
+        model=model,
+        train_x=x_train,
+        train_y=y_train,
+        optim=MyOptimizer(params=model.parameters(), lr=0.01),
+        epochs=1,
+        batch_size=8,
+        seed=0,
+    )
+    indices = torch.randperm(x_train.shape[0])[:4]
+    y_pred = model(x_train[indices])
+    print("y_train ", y_train[indices])
+    print("y_pred ", y_pred)
+    print("softmax(y_pred) ", torch.round(torch.softmax(y_pred, dim=1), decimals=4))
+
+
 if __name__ == "__main__":
     # print(make_tensor())
     # print(reshape_transpose(torch.arange(1, 7, dtype=torch.int32)))
@@ -551,13 +672,28 @@ if __name__ == "__main__":
     # print(apply_conv2d())
     # test_conv_nets()
     # print(sgd_step(torch.tensor([1.0, 2.0]), torch.tensor([0.5, 1.0]), lr=0.1))
-    print(
-        momentum_step(
-            torch.tensor([1.0, 2.0]),
-            torch.tensor([0.1, 0.2]),
-            torch.tensor([0.0, 0.0]),
-            0.1,
-            0.9,
-        )
-    )
+    # print(
+    #     momentum_step(
+    #         torch.tensor([1.0, 2.0]),
+    #         torch.tensor([0.1, 0.2]),
+    #         torch.tensor([0.0, 0.0]),
+    #         0.1,
+    #         0.9,
+    #     )
+    # )
+    # print(
+    #     adam_step(
+    #         torch.tensor([1.0, 2.0]),
+    #         torch.tensor([0.5, -0.5]),
+    #         torch.zeros(2),
+    #         torch.zeros(2),
+    #         1,
+    #         0.001,
+    #         0.9,
+    #         0.999,
+    #         1e-8,
+    #     )
+    # )
+    test_optimizer()
+    # test_conv_nets()
     pass
