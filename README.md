@@ -15,6 +15,7 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
 
 ## To-do
 - [x] test `fit_linear_regression`
+- [ ] add batchnorm2d to conv net and retrain with multiple seeds, check paran norms and activations 
 
 ## Learning
 - .backward() only works on scalars. if the output is a vector you either reduce it first (e.sum().backward()) or tell it what gradient is coming in (e.backward(torch.ones_like(e))).
@@ -47,6 +48,8 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
         name =  net.0.bias  params =  torch.Size([6])
         ```
 - `torch.zeros_like(p)` instead of `torch.zeros(p.shape)`. First one matches the dtype too.
+- `TensorDataset` (sub class of `Dataset`) indexes tensors along the first dimension, return sample upon query like `dataset.__getitem__(4)`.
+-  
 
 
 ### Losses

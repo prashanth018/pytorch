@@ -16,6 +16,7 @@ from torch.nn import (
 )
 from torch.optim import Adam
 from torch.optim.optimizer import Optimizer
+from torch.utils.data import TensorDataset, DataLoader
 
 
 def make_tensor():
@@ -652,6 +653,76 @@ def test_optimizer():
     print("softmax(y_pred) ", torch.round(torch.softmax(y_pred, dim=1), decimals=4))
 
 
+def batch_stats(X, y):
+    """Wrap X and y in TensorDataset + DataLoader(batch_size=4, shuffle=False).
+    X is 2d: (N, F)
+    y is 1d: (N,)
+
+    Return (num_batches, first_batch_X_shape_tuple).
+    """
+    # X, y = torch.arange(16, dtype=torch.float32).reshape(8, 2), torch.arange(8)
+    dataset = TensorDataset(X, y)
+    # print(dataset.__getitem__(4))  # (tensor([8., 9.]), tensor(4))
+    # print(dataset.__len__())  # 8
+    dataloader = DataLoader(dataset=dataset, batch_size=4, shuffle=False)
+    # it = dataloader._get_iterator()
+    # print(it._next_data())
+    # print(it._next_data())
+    s_x, _ = next(iter(dataloader))
+    return (len(dataloader), tuple(s_x.shape))
+
+
+class MyTransform:
+    def __init__(self, eps=1e-8):
+        self.eps = eps
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (1, 28, 28) float tensor in [0,1]
+        Return: transformed tensor, same shape/dtype.
+        Must be non-identity and deterministic.
+        """
+        return (x - x.mean()) / (x.std() + self.eps)
+
+
+def count_params():
+    """Build Sequential(Linear(4,8), ReLU, Linear(8,2)) and return trainable param count.
+
+    Returns:
+        int: total number of trainable parameters
+    """
+    # model = build_model(img_size=8, n_classes=2)
+    model = Sequential(
+        Linear(in_features=4, out_features=8),
+        ReLU(),
+        Linear(in_features=8, out_features=2),
+    )
+    params = model.parameters()
+    total = 0
+    for p in params:
+        if p.requires_grad:
+            # print(p.numel())
+            total += p.numel()
+    return total
+
+
+def build_mnist_model():
+    """
+    Return a tiny nn.Module for MNIST classification (10 classes).
+    IMPORTANT: If total trainable params > 2048, final accuracy will be set to 0.
+    Tip: Consider very small convs, global average pooling, and tiny linear head.
+    """
+
+    class TinyNet(Module):
+        def __init__(self):
+            super().__init__()
+            ...
+
+        def forward(self, x): ...
+
+    return TinyNet()
+
+
 if __name__ == "__main__":
     # print(make_tensor())
     # print(reshape_transpose(torch.arange(1, 7, dtype=torch.int32)))
@@ -706,6 +777,14 @@ if __name__ == "__main__":
     #         1e-8,
     #     )
     # )
-    test_optimizer()
+    # test_optimizer()
     # test_conv_nets()
-    pass
+    # print(
+    #     batch_stats(
+    #         torch.arange(16, dtype=torch.float32).reshape(8, 2), torch.arange(8)
+    #     )
+    # )
+    # h = 28
+    # print(MyTransform()(torch.arange(h * h, dtype=torch.float32).reshape((1, h, h))))
+    print(count_params())
+    # pass
