@@ -754,6 +754,72 @@ def build_mnist_model():
     return TinyNet()
 
 
+def simple_train_step(model, x, y, optimizer, loss_fn):
+    """Run one training step and return the pre-update loss as a float.
+
+    Args:
+        model: torch.nn.Module to train.
+        x: Input batch tensor.
+        y: Target batch tensor.
+        optimizer: torch.optim optimizer bound to model parameters.
+        loss_fn: Callable (pred, y) -> scalar loss tensor.
+
+    Returns:
+        float: Loss value computed before optimizer.step().
+    """
+    model.train()
+    optimizer.zero_grad()
+    y_pred = model(x)
+    loss = loss_fn(input=y_pred, target=y)
+    loss.backward()
+    loss_val = float(loss.item())
+    optimizer.step()
+    return loss_val
+
+
+def train_step(model, x_batch, y_batch, lr):
+    """
+    Perform ONE step of gradient descent training.
+
+    This is the core of deep learning! Every training loop does:
+    1. Forward pass: predictions = model(inputs)
+    2. Compute loss: how wrong are we?
+    3. Backward pass: compute gradients (derivatives) via chain rule
+    4. Update step: move parameters in direction that reduces loss
+
+    The math behind step 4 (gradient descent):
+        new_param = old_param - learning_rate * gradient
+
+    This works because the gradient points toward INCREASING loss,
+    so we go the OPPOSITE direction to decrease it.
+
+    Args:
+        model: nn.Module - the neural network
+        x_batch: input tensor, shape (batch_size, ...)
+        y_batch: target labels, shape (batch_size,)
+        lr: learning rate (step size)
+
+    Returns:
+        loss: float - the loss value for this batch
+
+    Requirements:
+        - Zero gradients before backward (or they accumulate!)
+        - Use F.cross_entropy for classification loss
+        - Update ALL model.parameters()
+        - Use torch.no_grad() when modifying parameters
+        - Return loss.item() to get Python float
+
+    Hints:
+        - model.parameters() gives all learnable parameters
+        - param.grad contains gradient after backward()
+        - param.grad.zero_() clears the gradient
+        - loss.backward() computes all gradients
+        - Use: with torch.no_grad(): param -= lr * param.grad
+    """
+
+    return None
+
+
 if __name__ == "__main__":
     # print(make_tensor())
     # print(reshape_transpose(torch.arange(1, 7, dtype=torch.int32)))
