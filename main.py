@@ -13,6 +13,8 @@ from torch.nn import (
     Flatten,
     CrossEntropyLoss,
     functional,
+    AdaptiveMaxPool2d,
+    BatchNorm2d,
 )
 from torch.optim import Adam
 from torch.optim.optimizer import Optimizer
@@ -685,23 +687,24 @@ class MyTransform:
         return (x - x.mean()) / (x.std() + self.eps)
 
 
-def count_params():
+def count_params(
+    model=Sequential(
+        Linear(in_features=4, out_features=8),
+        ReLU(),
+        Linear(in_features=8, out_features=2),
+    )
+):
     """Build Sequential(Linear(4,8), ReLU, Linear(8,2)) and return trainable param count.
 
     Returns:
         int: total number of trainable parameters
     """
     # model = build_model(img_size=8, n_classes=2)
-    model = Sequential(
-        Linear(in_features=4, out_features=8),
-        ReLU(),
-        Linear(in_features=8, out_features=2),
-    )
     params = model.parameters()
     total = 0
     for p in params:
         if p.requires_grad:
-            # print(p.numel())
+            print(p.numel())
             total += p.numel()
     return total
 
@@ -714,12 +717,40 @@ def build_mnist_model():
     """
 
     class TinyNet(Module):
-        def __init__(self):
+        def __init__(self, n_classes=10):
             super().__init__()
-            ...
 
-        def forward(self, x): ...
+            self.net = Sequential(
+                # in: (1, 28, 28)
+                Conv2d(
+                    in_channels=1, out_channels=3, kernel_size=3
+                ),  # w = (3,1,3,3); b = 3
+                # in: (3, 26, 26)
+                BatchNorm2d(3),  # mean = 3, var = 3
+                # in: (3, 26, 26)
+                ReLU(),
+                # in: (3, 26, 26)
+                AdaptiveMaxPool2d((12, 12)),
+                # in: (3, 12, 12)
+                Conv2d(
+                    in_channels=3, out_channels=10, kernel_size=3
+                ),  # w = (10, 3, 3, 3); b = 10
+                # in: (10, 10, 10)
+                BatchNorm2d(10),  # mean = 10, var = 10
+                # in: (10, 10, 10)
+                ReLU(),
+                # in: (10, 10, 10)
+                AdaptiveMaxPool2d((4, 4)),
+                # in: (10, 4, 4)
+                Flatten(),
+                Linear(in_features=160, out_features=n_classes),
+            )
 
+        def forward(self, x):
+            return self.net(x)
+
+    # tiny_model = TinyNet()
+    # count_params(tiny_model)
     return TinyNet()
 
 
@@ -786,5 +817,6 @@ if __name__ == "__main__":
     # )
     # h = 28
     # print(MyTransform()(torch.arange(h * h, dtype=torch.float32).reshape((1, h, h))))
-    print(count_params())
+    # print(count_params())
+    print(build_mnist_model())
     # pass

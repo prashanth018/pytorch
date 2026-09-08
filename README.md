@@ -37,7 +37,7 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
 - [DEBUGGING] I swapped the entries to loss function `bce_loss_fn(input=y_train, target=y_pred)`. Softmax must have gotten applied to the y_train. y_pred stayed as logits. Loss ended being meaningless and continued to be -ve. 
 - In simple case, Conv layer translates `(1, in_channel, H, W)` to `(1, out_channel, out(H), out(W))`. `in_channel` and `out_channel` are our preferences. Kind of like how we specify `in` & `out` dims for `Linear` layer. We don't have to specify `H`, `W`, `out(H)` & `out(W)`. Model figures it out itself. 
 - Why does H & W have to vary? because of the kernel size, padding and stride and other values provided into the conv net. `out(H) = ((H + 2*padding - kernel) // stride) + 1`
-- What makes `out_channels` vary? Model dynamically stacks additional `kernels` to increase the number of out channels. For example, if its a Conv layer of `Conv2d(3, 16, kernel_size=3)`. Weight matrix will be of shape `(16, 3, 3, 3)` -> This means, 16 kernels of size `(3, 3, 3)` convolved over `(3, H, W)` to generate `(3, out(H), out(W))` each. Therefore, output dim is `(16, 3, out(H), out(W))`.
+- What makes `out_channels` vary? Model dynamically stacks additional `kernels` to increase the number of out channels. For example, if its a Conv layer of `Conv2d(3, 16, kernel_size=3)`. Weight matrix will be of shape `(16, 3, 3, 3)` -> This means, 16 kernels of size `(3, 3, 3)` convolved over `(3, H, W)` to generate `(3, out(H), out(W))` each. Therefore, output dim is `(16, 3, out(H), out(W))`. `(3, 3, 3)` consolidates to `(1,3)` values. There are `16` such values stacked up vertically. 
 - `AdaptiveAvgPool2d`: Once you are done with all the Convs, you'd have to have blast these features off to a dense linear layer before inferencing logits. How does the SOTA architectures figure the input dims for Linear layer? `Linear(in_dims=??, out_dims=1)`. `MaxPool2d` takes kernel size and gives you an ouput spacial size `(H,W)` based on the kernel size. `AdaptiveAvgPool2d` takes `required output` as an input and figures the kernel and stride to match the required output. Example: `AdaptiveAvgPool2d((1,1))`.
 - Max Pooling conversion formula, say input has height `H` then `out(H) = ((H + 2*padding - kernel) // stride) + 1`.
 - **Max Pooling `stride = kernel` by default.
@@ -49,7 +49,13 @@ Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, 
         ```
 - `torch.zeros_like(p)` instead of `torch.zeros(p.shape)`. First one matches the dtype too.
 - `TensorDataset` (sub class of `Dataset`) indexes tensors along the first dimension, return sample upon query like `dataset.__getitem__(4)`.
--  
+- `DataLoader(dataset=dataset, batch_size=4, shuffle=False)` takes a dataset, preferred batch_size and shuffle settings. This class gives you an iterator of (X_train, y_train) mini_batches.
+- `TinyNet` in `build_mnist_model` is the right way to build a model.
+    - Mainly, you have `BatchNorm2d` that makes sure we don't run into 0ing grads like we did before.
+    - out_dim consistently go up, which is what is desired in a Conv Net (aking to ResNet & AlexNet).
+    - `AdaptiveMaxPool2d` makes it easier to focus on the `output(H,W)` instead of figuring out the math for kernel, padding, stride.
+    - Highest %age of params in the final dense layer. 
+
 
 
 ### Losses
