@@ -777,7 +777,7 @@ def simple_train_step(model, x, y, optimizer, loss_fn):
     return loss_val
 
 
-def train_step(model, x_batch, y_batch, lr):
+def gd_train_step(model, x_batch, y_batch, lr):
     """
     Perform ONE step of gradient descent training.
 
@@ -816,8 +816,110 @@ def train_step(model, x_batch, y_batch, lr):
         - loss.backward() computes all gradients
         - Use: with torch.no_grad(): param -= lr * param.grad
     """
+    model.train()
+    loss_fn = CrossEntropyLoss()
+    model.zero_grad()
+    y_pred = model(x_batch)
+    loss = loss_fn(input=y_pred, target=y_batch)
+    loss.backward()
+    # Parameter.sub_
+    for p in model.parameters():
+        if p.grad is not None:
+            with torch.no_grad():
+                # old_p = p
+                p.sub_(p.grad, alpha=lr)
+                # print((p - old_p) / p.grad)
 
-    return None
+    return float(loss.item())
+
+
+def test_gd_train_step():
+    x, y = generate_conv_train_data(batch_size=96, channels=1, image_size=(8, 8))
+    model = build_model(img_size=8, n_classes=2)
+    return gd_train_step(model=model, x_batch=x, y_batch=y, lr=0.01)
+
+
+def e2e_train_model(model, X_train, y_train, X_val, y_val, epochs, batch_size, lr):
+    """
+    Train a PyTorch model and return training history.
+
+    This is the standard PyTorch training pattern you'll use everywhere.
+    Now you can use torch.optim to handle the gradient updates!
+
+    Args:
+        model: nn.Module to train
+        X_train: training features, shape (N, ...)
+        y_train: training labels, shape (N,)
+        X_val: validation features, shape (M, ...)
+        y_val: validation labels, shape (M,)
+        epochs: number of training epochs
+        batch_size: mini-batch size
+        lr: learning rate
+
+    Returns:
+        history: List of dicts, one per epoch, with keys:
+            - 'epoch': epoch number (starting from 1)
+            - 'train_loss': average training loss for the epoch
+            - 'val_loss': validation loss after the epoch
+            - 'val_accuracy': validation accuracy after the epoch
+
+    Steps:
+        1. Create optimizer: optim.Adam(model.parameters(), lr=lr)
+        2. Create loss function: nn.CrossEntropyLoss()
+        3. For each epoch:
+            a. Shuffle training data
+            b. Loop over mini-batches:
+                - optimizer.zero_grad()
+                - Forward pass
+                - Compute loss
+                - loss.backward()
+                - optimizer.step()
+            c. Compute validation accuracy
+            d. Append metrics to history
+        4. Return history
+
+    Hints:
+        - torch.randperm(n) gives a random permutation for shuffling
+        - Use model.train() before training, model.eval() before validation
+        - Use torch.no_grad() during validation
+        - logits.argmax(dim=1) gives predicted classes
+    """
+
+    history = []
+    model.train()
+    optim = Adam(model.parameters(), lr=lr)
+    loss_fn = CrossEntropyLoss()
+    train_batch_size = X_train.shape[0]
+    val_batch_size = X_val.shape[0]
+    for e in range(epochs):
+        print("e = ", e)
+        idx = batch_size
+        perm_list = torch.randperm(train_batch_size)
+        total_train_loss = 0.0
+        for idx in range(0, train_batch_size, batch_size):
+            optim.zero_grad()
+            with model.eval():
+                y_val_pred = model(X_val)
+            mini_batch = perm_list[idx : idx + batch_size]
+            y_train_pred = model(X_train[mini_batch])
+            # val_batch_size
+            loss_train = loss_fn(input=y_train_pred, target=y_train[mini_batch])
+            loss_val = loss_fn(input=y_val_pred, target=y_val)
+            loss_train.backward()
+            optim.step()
+            total_train_loss += loss_train.item() * len(mini_batch)
+            accuracy = (y_val_pred.argmax(dim=1) == y_val.argmax(dim=1)).sum().item()
+
+        history.append(
+            {
+                "epoch": e,
+                "train_loss": total_train_loss / train_batch_size,
+                "val_loss": loss_val,
+                "val_accuracy": accuracy / val_batch_size,
+            }
+        )
+
+    return history
 
 
 if __name__ == "__main__":
@@ -884,5 +986,6 @@ if __name__ == "__main__":
     # h = 28
     # print(MyTransform()(torch.arange(h * h, dtype=torch.float32).reshape((1, h, h))))
     # print(count_params())
-    print(build_mnist_model())
+    # print(build_mnist_model())
+    print(test_gd_train_step())
     # pass
