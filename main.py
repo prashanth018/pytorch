@@ -902,20 +902,21 @@ def e2e_train_model(model, X_train, y_train, X_val, y_val, epochs, batch_size, l
                 y_val_pred = model(X_val)
             mini_batch = perm_list[idx : idx + batch_size]
             y_train_pred = model(X_train[mini_batch])
-            # val_batch_size
             loss_train = loss_fn(input=y_train_pred, target=y_train[mini_batch])
             loss_val = loss_fn(input=y_val_pred, target=y_val)
             loss_train.backward()
             optim.step()
             total_train_loss += loss_train.item() * len(mini_batch)
-            accuracy = (y_val_pred.argmax(dim=1) == y_val.argmax(dim=1)).sum().item()
+            val_accuracy = (
+                (y_val_pred.argmax(dim=1) == y_val.argmax(dim=1)).sum().item()
+            )
 
         history.append(
             {
                 "epoch": e,
                 "train_loss": total_train_loss / train_batch_size,
                 "val_loss": loss_val,
-                "val_accuracy": accuracy / val_batch_size,
+                "val_accuracy": val_accuracy / val_batch_size,
             }
         )
 
