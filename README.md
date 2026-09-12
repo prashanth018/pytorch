@@ -1,6 +1,6 @@
-# pytorch
+# PyTorch
 
-Practice repo. Keeping PyTorch fluency sharp — tensors, shapes, broadcasting, autograd.
+Repo for PyTorch fluency
 
 ## What's here
 
