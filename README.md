@@ -15,7 +15,8 @@ Repo for PyTorch fluency
 
 ## To-do
 - [x] test `fit_linear_regression`
-- [ ] add batchnorm2d to conv net and retrain with multiple seeds, check paran norms and activations 
+- [ ] add batchnorm2d to conv net and retrain with multiple seeds, check paran norms and activations
+- [ ] plot the gradients & activations of a simple MLP. Behavior of different activationd and they manipulate/scale the gradients during backprop and the influence of the input. [Ref](https://youtu.be/P6sfmUTpUmc?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=964). What we need is a layer viz module that helps visualize the gradients, activations, inputs. 
 
 ## Learning
 - .backward() only works on scalars. if the output is a vector you either reduce it first (e.sum().backward()) or tell it what gradient is coming in (e.backward(torch.ones_like(e))).
@@ -55,7 +56,12 @@ Repo for PyTorch fluency
     - out_dim consistently go up, which is what is desired in a Conv Net (aking to ResNet & AlexNet).
     - `AdaptiveMaxPool2d` makes it easier to focus on the `output(H,W)` instead of figuring out the math for kernel, padding, stride.
     - Highest %age of params in the final dense layer. 
-
+- How does variance flow through the net?
+    - `n_in * var_w  > 1`   ->  activations grow with depth, explode
+    - `n_in * var_w  < 1`   ->  shrink with depth, vanish
+    - `n_in * var_w == 1`   ->  preserved
+    - **Popular initialization schemes are `var_w = 1/n_in` to keep activations preserved. This also ties to why we scale the attentions with `sqrt(d_in)`.
+- `torch.nn.init.kaiming_normal_` helps rightly initialize the weights to scale it down to the input value.
 
 
 ### Losses
@@ -104,6 +110,9 @@ Turns out, second conv layer's output (just before relu2) has all its outputs (`
         print(h.std(dim=0).mean().item())
     ```
 - Confirmed the hypothesis by looking at the weights before the activation layer and turns out the `max` of the weights was `-0.055`.
+- ***It's important to understand what input values to an activation function 0s out the gradients (local or incoming) when we do a backprop. For example values of `1` and `-1` zeros the gradient when we do a backprop through tanh. This is because that grad for the layer before tanh activation is `1 - t**2 * out.grad` (ref micrograd implementation). This means grad 0s for +-1. Similarly, values `< 0` get 0 gradients during backprop for ReLU. This kills the training. One best way to look is to plot the histogram and see the pre & post activation values like suggested in [this video](https://youtu.be/P6sfmUTpUmc?list=PLAqhIrjkxbuWI23v9cThsA9GvCAUhRvKZ&t=867)
+    - Intuition: Imagine a `tanh` node with large input and `~1` output. Changing the input will not have any impact on the loss whatsoever. This is because the input to tanh is already so high (and is kinda in a plateaued region). Therefore the gradient is 0 and everything that contributed to this high value (weights and biases feeding into this tanh node) gets 0 grad.
+
 
 #### First things to check when a model won't train
 

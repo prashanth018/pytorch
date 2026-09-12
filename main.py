@@ -1,3 +1,5 @@
+from pprint import pprint
+
 import torch
 from torch.nn import (
     Linear,
@@ -407,12 +409,14 @@ class TinyCNN(Module):
             # in_conv1     = (n, 1, 8, 8)
             Conv2d(in_channels=1, out_channels=6, kernel_size=3, padding=1),
             # out_conv1    = (n, 6, 8, 8)   [kernel=3, padding=1, stride=1] -> (8+2-3)/1+1 = 8
+            BatchNorm2d(6),
             ReLU(),
             # out_relu1    = (n, 6, 8, 8)   [elementwise, shape unchanged]
             MaxPool2d(3, stride=1),
             # out_pool1    = (n, 6, 6, 6)   [kernel=3, padding=0, stride=1] -> (8+0-3)/1+1 = 6
             Conv2d(in_channels=6, out_channels=3, kernel_size=3, padding=1),
             # out_conv2    = (n, 3, 6, 6)   [kernel=3, padding=1, stride=1] -> (6+2-3)/1+1 = 6
+            BatchNorm2d(3),
             ReLU(),
             # out_relu2    = (n, 3, 6, 6)   [elementwise, shape unchanged]
             MaxPool2d(3, stride=1),
@@ -886,41 +890,64 @@ def e2e_train_model(model, X_train, y_train, X_val, y_val, epochs, batch_size, l
     """
 
     history = []
-    model.train()
     optim = Adam(model.parameters(), lr=lr)
     loss_fn = CrossEntropyLoss()
     train_batch_size = X_train.shape[0]
     val_batch_size = X_val.shape[0]
     for e in range(epochs):
+        model.train()
         print("e = ", e)
         idx = batch_size
         perm_list = torch.randperm(train_batch_size)
         total_train_loss = 0.0
         for idx in range(0, train_batch_size, batch_size):
             optim.zero_grad()
-            with model.eval():
-                y_val_pred = model(X_val)
             mini_batch = perm_list[idx : idx + batch_size]
             y_train_pred = model(X_train[mini_batch])
             loss_train = loss_fn(input=y_train_pred, target=y_train[mini_batch])
-            loss_val = loss_fn(input=y_val_pred, target=y_val)
             loss_train.backward()
             optim.step()
-            total_train_loss += loss_train.item() * len(mini_batch)
+            total_train_loss += loss_train.item() * batch_size
+
+        # inference on validation data
+        optim.zero_grad()
+        model.eval()
+        with torch.no_grad():
+            y_val_pred = model(X_val)
+            loss_val = loss_fn(input=y_val_pred, target=y_val)
             val_accuracy = (
-                (y_val_pred.argmax(dim=1) == y_val.argmax(dim=1)).sum().item()
-            )
+                (y_val_pred.argmax(dim=-1) == y_val.argmax(dim=-1)).sum().item()
+            ) * 1.0
 
         history.append(
             {
                 "epoch": e,
                 "train_loss": total_train_loss / train_batch_size,
-                "val_loss": loss_val,
+                "val_loss": loss_val.item(),
                 "val_accuracy": val_accuracy / val_batch_size,
             }
         )
 
     return history
+
+
+def test_e2e_train():
+    x_train, y_train = generate_conv_train_data(
+        batch_size=96, channels=1, image_size=(8, 8)
+    )
+    x_val, y_val = generate_conv_train_data(batch_size=8, channels=1, image_size=(8, 8))
+    model = build_model()
+    history = e2e_train_model(
+        model=model,
+        X_train=x_train,
+        y_train=y_train,
+        X_val=x_val,
+        y_val=y_val,
+        epochs=10,
+        batch_size=6,
+        lr=0.01,
+    )
+    pprint(history)
 
 
 if __name__ == "__main__":
@@ -988,5 +1015,6 @@ if __name__ == "__main__":
     # print(MyTransform()(torch.arange(h * h, dtype=torch.float32).reshape((1, h, h))))
     # print(count_params())
     # print(build_mnist_model())
-    print(test_gd_train_step())
-    # pass
+    # print(test_gd_train_step())
+    print(test_e2e_train())
+    pass
